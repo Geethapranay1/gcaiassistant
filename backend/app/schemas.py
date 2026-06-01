@@ -3,12 +3,18 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
+class Message(BaseModel):
+    role: str
+    content: str
+
+
 class ProcessRequest(BaseModel):
     query: str = Field(..., min_length=1)
+    history: list[Message] = Field(default_factory=list)
 
 
 class ProcessResponse(BaseModel):
-    tool: Literal["send_email", "draft_email", "schedule_meeting"]
+    tool: Literal["send_email", "draft_email", "schedule_meeting", "chat"]
     confidence: float = Field(..., ge=0.0, le=1.0)
     args: dict
     missing_fields: list[str] = Field(default_factory=list)

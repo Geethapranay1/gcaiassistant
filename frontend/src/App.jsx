@@ -63,6 +63,61 @@ function replaceChat(chats, activeChatId, nextChat) {
   return chats.map(chat => (chat.id === activeChatId ? nextChat : chat))
 }
 
+function summarizeAssistantMessage(data) {
+  if (!data) return ''
+  if (data.tool === 'chat') {
+    return data.follow_up_question || ''
+  }
+
+  const args = data.args || {}
+  const done = !data.missing_fields || data.missing_fields.length === 0
+
+  if (data.tool === 'schedule_meeting') {
+    const who = (args.participants || []).join(', ') || 'someone'
+    const dur = args.duration_minutes ? `${args.duration_minutes} minutes` : ''
+    const date = args.date || ''
+    const time = args.time || (args.selected_slot ? args.selected_slot.split(' ')[1] : '')
+    if (done) {
+      let msg = `I scheduled a meeting with ${who}`
+      if (dur) msg += ` for ${dur}`
+      if (date) msg += ` on ${date}`
+      if (time) msg += ` at ${time}`
+      return msg + '.'
+    } else {
+      let msg = `The user wants to schedule a meeting with ${who}`
+      if (dur) msg += ` for ${dur}`
+      if (data.missing_fields.length > 0) msg += `. Still need: ${data.missing_fields.join(', ')}`
+      if (data.follow_up_question) msg += `. I asked: "${data.follow_up_question}"`
+      return msg + '.'
+    }
+  }
+
+  if (data.tool === 'send_email' || data.tool === 'draft_email') {
+    const action = data.tool === 'send_email' ? 'sent' : 'drafted'
+    const to = (args.to || []).join(', ') || 'someone'
+    const subject = args.subject ? ` with subject "${args.subject}"` : ''
+    const body = args.body ? ` saying "${args.body}"` : ''
+    if (done) {
+      return `I ${action} an email to ${to}${subject}${body}.`
+    } else {
+      let msg = `The user wants to ${data.tool.replace('_', ' ')} to ${to}${subject}`
+      if (data.missing_fields.length > 0) msg += `. Still need: ${data.missing_fields.join(', ')}`
+      if (data.follow_up_question) msg += `. I asked: "${data.follow_up_question}"`
+      return msg + '.'
+    }
+  }
+
+
+  const parts = [`Action: ${data.tool}.`]
+  if (Object.keys(args).length > 0) {
+    parts.push(`Details: ${JSON.stringify(args)}.`)
+  }
+  if (data.follow_up_question) {
+    parts.push(`I asked: "${data.follow_up_question}"`)
+  }
+  return parts.join(' ')
+}
+
 function JsonBlock({ data }) {
   return (
     <div className="mt-3 rounded-lg bg-neutral-950 p-4 overflow-x-auto">
@@ -172,8 +227,15 @@ export default function App() {
     const nextChats = replaceChat(chats, activeChatId, updatedChat)
     persistChats(nextChats)
 
+    const contextHistory = chat.messages
+      .filter(m => m.type === 'user' || m.type === 'assistant')
+      .map(m => ({
+        role: m.type === 'user' ? 'user' : 'assistant',
+        content: m.type === 'user' ? m.text : summarizeAssistantMessage(m.data)
+      }))
+
     try {
-      const result = await processQuery(text)
+      const result = await processQuery(text, contextHistory)
       const finishedChat = {
         ...updatedChat,
         messages: [...messages, { type: 'assistant', data: result }],
@@ -206,8 +268,15 @@ export default function App() {
     const nextChats = replaceChat(chats, activeChatId, updatedChat)
     persistChats(nextChats)
 
+    const contextHistory = chat.messages
+      .filter(m => m.type === 'user' || m.type === 'assistant')
+      .map(m => ({
+        role: m.type === 'user' ? 'user' : 'assistant',
+        content: m.type === 'user' ? m.text : JSON.stringify(m.data)
+      }))
+
     try {
-      const result = await sendFollowUp(previous, reply)
+      const result = await sendFollowUp(previous, reply, contextHistory)
       const finishedChat = {
         ...updatedChat,
         messages: [...messages, { type: 'assistant', data: result }],
@@ -321,7 +390,14 @@ export default function App() {
                         </div>
                       </div>
                     )}
-                    {msg.type === 'assistant' && (
+                    {msg.type === 'assistant' && msg.data.tool === 'chat' && (
+                      <div className="flex justify-start">
+                        <div className="max-w-[85%] bg-neutral-100 text-black px-5 py-3 rounded-2xl rounded-bl-sm text-sm leading-relaxed shadow-sm">
+                          {msg.data.follow_up_question || 'How can I help you?'}
+                        </div>
+                      </div>
+                    )}
+                    {msg.type === 'assistant' && msg.data.tool !== 'chat' && (
                       <div className="flex justify-start">
                         <Card className="max-w-[95%] border-neutral-200 shadow-sm bg-white">
                           <CardContent className="p-5">

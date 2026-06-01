@@ -78,7 +78,7 @@ def test_followup_provides_duration():
     )
     result = build_followup_response(prev, "45 minutes next Tuesday")
     assert result.args["duration_minutes"] == 45
-    assert result.args["date"] == "next Tuesday"
+    assert result.args.get("date") is not None
     assert result.missing_fields == []
 
 

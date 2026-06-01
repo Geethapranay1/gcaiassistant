@@ -12,14 +12,21 @@ class LLMClient:
         self.client = OpenAI(api_key=key, base_url="https://api.groq.com/openai/v1")
         self.model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
-    def call(self, system_prompt: str, user_query: str) -> dict:
+    def call(self, system_prompt: str, user_query: str, history: list = None) -> dict:
+        messages = [{"role": "system", "content": system_prompt}]
+        if history:
+            for msg in history:
+                if isinstance(msg, dict):
+                    messages.append({"role": msg["role"], "content": msg["content"]})
+                else:
+                    messages.append({"role": msg.role, "content": msg.content})
+        
+        messages.append({"role": "user", "content": user_query})
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_query},
-                ],
+                messages=messages,
                 temperature=0.1,
                 max_tokens=512,
                 response_format={"type": "json_object"},
@@ -27,9 +34,9 @@ class LLMClient:
             return json.loads(response.choices[0].message.content)
         except Exception:
             return {
-                "tool": "draft_email",
-                "confidence": 0.0,
+                "tool": "chat",
+                "confidence": 1.0,
                 "args": {},
-                "missing_fields": ["to", "body"],
+                "missing_fields": [],
                 "follow_up_question": "I had trouble understanding that. Could you rephrase?",
             }

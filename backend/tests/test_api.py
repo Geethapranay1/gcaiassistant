@@ -24,8 +24,8 @@ def test_find_slot_endpoint():
     })
     assert resp.status_code == 200
     data = resp.json()
-    assert "2026-04-22 15:00" in data["available_slots"]
-    assert data["selected_slot"] == "2026-04-22 15:00"
+    assert "2026-06-02 15:00" in data["available_slots"]
+    assert data["selected_slot"] == "2026-06-02 15:00"
 
 def test_find_slot_empty_participants():
     resp = client.post("/find-slot", json={
